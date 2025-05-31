@@ -1,0 +1,64 @@
+const API_TOKEN = 'oUDrYppb7deRHXI';
+
+const socket = new WebSocket('wss://ws.deriv.com/websockets/v3?app_id=1089');
+
+let lastPrice = null;
+
+socket.onopen = () => {
+    console.log('✅ Connected to Deriv');
+
+    socket.send(JSON.stringify({
+        authorize: API_TOKEN
+    }));
+};
+
+socket.onmessage = (msg) => {
+    const data = JSON.parse(msg.data);
+    console.log('📩', data);
+
+    // After successful login
+    if (data.msg_type === 'authorize') {
+        console.log('🟢 Authorized as', data.authorize.loginid);
+
+        // Subscribe to Volatility 100 Index
+        socket.send(JSON.stringify({
+            ticks_subscribe: 'R_100'
+        }));
+    }
+
+    // Tick stream received
+    if (data.msg_type === 'tick') {
+        lastPrice = parseFloat(data.tick.quote);
+        console.log('💹 Price:', lastPrice);
+
+        // Example condition: Auto-buy if price drops below 10000
+        if (lastPrice < 10000) {
+            console.log('⚡ Triggered buy at price:', lastPrice);
+            placeTrade();
+        }
+    }
+
+    // Trade response
+    if (data.msg_type === 'buy') {
+        console.log('✅ Trade Placed:', data.buy.transaction_id);
+    }
+};
+
+// Function to place trade
+function placeTrade() {
+    const trade = {
+        buy: 1,
+        price: 0, // Market price
+        parameters: {
+            amount: 1, // stake $1
+            basis: 'stake',
+            contract_type: 'CALL', // or 'PUT'
+            currency: 'USD',
+            duration: 1,
+            duration_unit: 't',
+            symbol: 'R_100'
+        }
+    };
+
+    socket.send(JSON.stringify(trade));
+}
