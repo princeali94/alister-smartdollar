@@ -1,0 +1,81 @@
+const API_TOKEN = 'oUDrYppb7deRHXI';
+const socket = new WebSocket('wss://ws.deriv.com/websockets/v3?app_id=1089');
+
+let lastPrice = null;
+let isCooldown = false;
+let winCount = 0;
+let lossCount = 0;
+let maxLosses = 3;
+
+socket.onopen = () => {
+    console.log('✅ Connected to Deriv');
+    socket.send(JSON.stringify({ authorize: API_TOKEN }));
+};
+
+socket.onmessage = (msg) => {
+    const data = JSON.parse(msg.data);
+    console.log('📩', data);
+
+    if (data.msg_type === 'authorize') {
+        console.log('🟢 Authorized as', data.authorize.loginid);
+        socket.send(JSON.stringify({ ticks_subscribe: 'R_100' }));
+    }
+
+    if (data.msg_type === 'tick') {
+        lastPrice = parseFloat(data.tick.quote);
+        console.log('💹 Price:', lastPrice);
+
+        if (!isCooldown && lossCount < maxLosses && lastPrice < 10000) {
+            console.log('⚡ Condition met! Trying to trade...');
+            placeTrade();
+        }
+    }
+
+    if (data.msg_type === 'buy') {
+        console.log('✅ Trade Placed:', data.buy.transaction_id);
+        startCooldown();
+    }
+
+    if (data.msg_type === 'proposal_open_contract') {
+        const contract = data.proposal_open_contract;
+        if (contract.is_expired) {
+            if (contract.profit >= 0) {
+                winCount++;
+                console.log('🎉 Trade WON! Total wins:', winCount);
+            } else {
+                lossCount++;
+                console.log('💔 Trade LOST! Total losses:', lossCount);
+                if (lossCount >= maxLosses) {
+                    console.log('🛑 Max losses reached. Stopping bot.');
+                }
+            }
+        }
+    }
+};
+
+function placeTrade() {
+    const trade = {
+        buy: 1,
+        price: 0,
+        parameters: {
+            amount: 1,
+            basis: 'stake',
+            contract_type: 'CALL',
+            currency: 'USD',
+            duration: 1,
+            duration_unit: 't',
+            symbol: 'R_100'
+        }
+    };
+
+    socket.send(JSON.stringify(trade));
+}
+
+function startCooldown() {
+    isCooldown = true;
+    console.log('⏳ Cooldown started...');
+    setTimeout(() => {
+        isCooldown = false;
+        console.log('✅ Cooldown ended. Ready to trade again.');
+    }, 30000); // 30 seconds
+}
