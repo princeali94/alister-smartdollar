@@ -1,0 +1,35 @@
+// Replace this with your actual Deriv token
+const API_TOKEN = 'YOUR_DERIV_API_TOKEN_HERE';
+
+// Connect to Deriv WebSocket
+const socket = new WebSocket('wss://ws.deriv.com/websockets/v3?app_id=1089');
+
+// When connected
+socket.onopen = () => {
+    console.log('✅ Connected to Deriv');
+
+    // Send authorization
+    socket.send(JSON.stringify({
+        authorize: API_TOKEN
+    }));
+};
+
+// When receiving messages
+socket.onmessage = (msg) => {
+    const data = JSON.parse(msg.data);
+    console.log('📩 Received:', data);
+
+    // Example: Subscribe to Volatility 100 Index price stream
+    if (data.msg_type === 'authorize') {
+        console.log('🟢 Authorized as:', data.authorize.loginid);
+
+        socket.send(JSON.stringify({
+            ticks_subscribe: 'R_100'
+        }));
+    }
+
+    // Log price updates
+    if (data.msg_type === 'tick') {
+        console.log('💹 Tick:', data.tick.quote);
+    }
+};
